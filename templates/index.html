@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyzer — Hybrid Review Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- ── Top Navbar ── -->
+    <nav class="navbar">
+        <div class="navbar-left">
+            <span class="nav-logo-dot"></span>
+            <span class="nav-brand">Hybrid Review Analyzer</span>
+        </div>
+        <div class="navbar-right">
+            {% if user %}
+            <span class="nav-user">
+                <span class="nav-user-dot"></span>
+                {{ user }}
+            </span>
+            {% endif %}
+            <a href="/logout" class="nav-logout">Sign Out</a>
+        </div>
+    </nav>
+
+    <!-- ── Page Content ── -->
+    <div class="page-wrap">
+        <div class="container">
+
+            <div class="header">
+                <div class="header-badge">AI Sentiment Engine</div>
+                <h2>Analyze a <span>Review</span></h2>
+                <p class="header-sub">Paste a product review and get instant sentiment analysis.</p>
+            </div>
+
+            <div class="divider"></div>
+
+            <form id="sentimentForm" action="/predict" method="POST">
+
+                <div class="field-group">
+                    <div class="field">
+                        <label for="vote">Helpful Votes</label>
+                        <input type="number" name="vote" id="vote" min="0" max="10" placeholder="0" required>
+                    </div>
+
+                    <div class="field">
+                        <label for="verified">Purchase Status</label>
+                        <div class="custom-select">
+                            <select name="verified" id="verified" required>
+                                <option value="1">Verified ✓</option>
+                                <option value="0">Not Verified</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field full">
+                        <label for="review">Review Text</label>
+                        <textarea name="review" id="review" placeholder="Write your review here..." required></textarea>
+                    </div>
+                </div>
+
+                <button type="submit" id="analyzeBtn">
+                    Analyze Sentiment →
+                </button>
+
+            </form>
+
+            {% if result %}
+            <div class="result-box {{ 'positive' if 'Positive' in result else 'negative' }}">
+                {{ result }}
+            </div>
+            {% endif %}
+
+            <div class="loader" id="loader"></div>
+
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+</body>
+</html>
