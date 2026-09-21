@@ -5,6 +5,5 @@ scikit-learn==1.8.0
 scipy==1.17.1
 nltk==3.9.3
 python-dotenv==1.2.3
-pymongo==4.17.0
-dnspython==2.8.0
+mysql-connector-python
 joblib==1.5.3
