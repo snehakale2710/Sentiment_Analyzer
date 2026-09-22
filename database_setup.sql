@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS hybrid_analyzer_db;
-USE hybrid_analyzer_db;
+CREATE DATABASE IF NOT EXISTS sentiment_db;
+USE sentiment_db;
 
 CREATE TABLE IF NOT EXISTS users (
     id       INT          AUTO_INCREMENT PRIMARY KEY,

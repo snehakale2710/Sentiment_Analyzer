@@ -40,7 +40,7 @@ class TextCleaner(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        if isinstance(X, list):
+        if not isinstance(X, pd.Series):
             X = pd.Series(X)
 
         X = X.fillna("")

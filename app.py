@@ -7,14 +7,18 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import joblib
 import pandas as pd
 import mysql.connector
+from mysql.connector import IntegrityError
 from contextlib import contextmanager
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="public/static", static_url_path="/static")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 if not app.secret_key:
     raise RuntimeError("FLASK_SECRET_KEY environment variable is not set")
 
-model = joblib.load("hybrid_sentiment_analyzer_model.pkl")
+MIN_PASSWORD_LENGTH = 6
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+model = joblib.load(os.path.join(BASE_DIR, "hybrid_sentiment_analyzer_model.pkl"))
 
 # ── MySQL Config ──────────────────────────────────────────────────────────────
 
@@ -23,6 +27,7 @@ DB_CONFIG = {
     "user":     os.environ.get("DB_USER", "root"),
     "password": os.environ.get("DB_PASSWORD"),
     "database": os.environ.get("DB_NAME", "hybrid_analyzer_db"),
+    "ssl_disabled": os.environ.get("DB_SSL_DISABLED", "0") == "1",
 }
 if not DB_CONFIG["password"]:
     raise RuntimeError("DB_PASSWORD environment variable is not set")
@@ -40,16 +45,12 @@ def get_connection():
 
 
 def init_db():
-    """Creates the database and users table if they don't exist yet."""
-    conn = mysql.connector.connect(
-        host=DB_CONFIG["host"],
-        user=DB_CONFIG["user"],
-        password=DB_CONFIG["password"],
-    )
-    try:
+    """Creates the users table if it doesn't exist yet.
+    Run only when RUN_DB_INIT=1 — on Vercel the database and its
+    permissions are set up ahead of time (see database_setup.sql),
+    since the app's DB user typically can't CREATE DATABASE there."""
+    with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']}")
-        cursor.execute(f"USE {DB_CONFIG['database']}")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id       INT          AUTO_INCREMENT PRIMARY KEY,
@@ -59,10 +60,9 @@ def init_db():
         """)
         conn.commit()
         cursor.close()
-    finally:
-        conn.close()
 
-init_db()
+if os.environ.get("RUN_DB_INIT") == "1":
+    init_db()
 
 
 def get_user(email: str):
@@ -75,14 +75,22 @@ def get_user(email: str):
 
 
 def create_user(email: str, password: str):
+    """Returns True on success, False if the email was taken by a
+    concurrent request (race between get_user() and this insert)."""
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO users (email, password) VALUES (%s, %s)",
-            (email, generate_password_hash(password)),
-        )
-        conn.commit()
-        cursor.close()
+        try:
+            cursor.execute(
+                "INSERT INTO users (email, password) VALUES (%s, %s)",
+                (email, generate_password_hash(password)),
+            )
+            conn.commit()
+            return True
+        except IntegrityError:
+            conn.rollback()
+            return False
+        finally:
+            cursor.close()
 
 # ── Auth Routes ───────────────────────────────────────────────────────────────
 
@@ -108,10 +116,15 @@ def login():
 
         if action == "register":
             active_tab = "register"
-            if get_user(email):
+            if not email or "@" not in email:
+                error = "Please enter a valid email address."
+            elif len(password) < MIN_PASSWORD_LENGTH:
+                error = f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
+            elif get_user(email):
+                error = "An account with this email already exists. Please log in."
+            elif not create_user(email, password):
                 error = "An account with this email already exists. Please log in."
             else:
-                create_user(email, password)
                 session["user"] = email
                 return redirect(url_for("analyze"))
 
@@ -150,6 +163,9 @@ def predict():
         vote     = int(request.form["vote"])
         verified = int(request.form["verified"])
     except (KeyError, ValueError):
+        return render_template("index.html", result="Invalid input — please check your entries.", user=session["user"])
+
+    if vote < 0 or verified not in (0, 1):
         return render_template("index.html", result="Invalid input — please check your entries.", user=session["user"])
 
     review_text = request.form.get("review", "").strip()
